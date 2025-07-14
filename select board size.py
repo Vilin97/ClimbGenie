@@ -97,6 +97,11 @@ for entry in stats:
 import sqlite3, io, requests, matplotlib.pyplot as plt
 from itertools import cycle
 from PIL import Image
+import matplotlib as mpl
+import matplotlib.patheffects as pe
+
+mpl.rcParams["figure.dpi"]   = 300   # on-screen
+mpl.rcParams["savefig.dpi"]  = 300   # files
 
 DB   = "kilter_dataset.csv"
 API  = "https://api.kilterboardapp.com/img/{}"
@@ -129,49 +134,68 @@ def image(fname):
 
 def visualize_big_boards(min_climbs: int = 200_000, db_path: str = DB) -> None:
     """
-    For every board (layout_id, size_id) whose union-of-sets has ≥ `min_climbs`
-    compatible climbs, show **one** picture that merges every installed set:
-
-        • the background is the PNG/JPEG for the first set
-        • each additional set is alpha-composited on top
-        • title lists layout, size, all set_ids, climb count, total holds
-    Close the figure (or advance) to see the next board.
+    Show every board (layout_id, size_id) whose union-of-sets has
+    ≥ `min_climbs` fully-contained climbs.  Each figure:
+        • composite background (all sets),
+        • red “id / index” label next to every visible hold.
+    Close the window (or hit “next”) to advance to the next board.
     """
     big_boards = [s for s in board_stats(db_path) if s["climbs"] >= min_climbs]
 
     with sqlite3.connect(db_path) as conn:
         for st in big_boards:
-            lid   = st["layout_id"]
-            sid   = st["size_id"]
-            sets  = st["sets"]                 # e.g. [1, 20]
-            n_clm = st["climbs"]
-            n_hld = st["holds_total"]
+            lid, sid, sets = st["layout_id"], st["size_id"], st["sets"]
+            l, r, b, t     = edges(conn, sid)
 
-            # ------------------------------------------------------------------
-            # composite all set images into one RGBA canvas
-            # ------------------------------------------------------------------
-            base_img = None
+            # ── composite background ────────────────────────────────────
+            composite = None
             for set_id in sets:
-                bg_fname = next(
-                    fname for size_id, s_id, fname in board_rows(conn, lid)
-                    if size_id == sid and s_id == set_id
+                fname = next(
+                    fn for s_id, s_set, fn in board_rows(conn, lid)
+                    if s_id == sid and s_set == set_id
                 )
-                img = image(bg_fname).convert("RGBA")   # helper `image()` downloads
+                layer = image(fname).convert("RGBA")
+                composite = layer if composite is None else Image.alpha_composite(composite, layer)
 
-                if base_img is None:
-                    base_img = img
-                else:
-                    base_img = Image.alpha_composite(base_img, img)
+            # ── collect holds inside board edges ────────────────────────
+            union = {}
+            for set_id in sets:
+                for pid, _mirrored, x, y in holds(conn, lid, set_id):   # ← note “_mirrored”
+                    if l <= x <= r and b <= y <= t:
+                        union[pid] = (x, y)
 
-            # ------------------------------------------------------------------
-            # show the composite
-            # ------------------------------------------------------------------
+
+            ordered = sorted(union.items())          # deterministic order
+            idx_map = {pid: i + 1 for i, (pid, _) in enumerate(ordered)}
+
+            x_scale = composite.width  / (r - l)
+            y_scale = composite.height / (t - b)
+
+            # ── plot ─────────────────────────────────────────────────────
             fig, ax = plt.subplots(figsize=(6, 9))
-            ax.imshow(base_img)
+            ax.imshow(composite)
             ax.axis("off")
-            title = (f"layout {lid}  •  size {sid}  •  sets {sets}  "
-                     f"—  climbs {n_clm:,}  •  holds {n_hld}")
-            ax.set_title(title, fontsize=10)
+
+            for pid, (x, y) in ordered:
+                xp = (x - l) * x_scale
+                yp = composite.height - (y - b) * y_scale
+                ax.text(
+                    xp,
+                    yp,
+                    f"{pid}\n\n{idx_map[pid]}",
+                    color="red",
+                    fontsize=6,
+                    ha="center",
+                    va="center",
+                    linespacing=0.55,
+                    linespacing=0.55,
+                )
+
+            ax.set_title(
+                f"layout {lid}  •  size {sid}  •  sets {sets}  —  "
+                f"{st['climbs']:,} climbs  •  {st['holds_total']} holds",
+                fontsize=8,
+            )
             plt.tight_layout()
             plt.show()
 
