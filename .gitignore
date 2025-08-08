@@ -1,1 +1,2 @@
-kilter_dataset.csv
+*.csv
+*.sqlite
