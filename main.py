@@ -1,9 +1,5 @@
 # %%
-# wanna make data work easier
-# 1. make a dataframe, save as csv, only save columns I want right now: name, uuid, difficulty grade, angle, holds, num ascents
-# 2. make functions to convert between hold names like 1075 and indices [0,...,475]
-# 3. make a function to visualize a route. save the board image locally, then draw the holds on top of it.
-# only interested in the single baord setup: 
+# only using the single baord setup: 
 # LAYOUT_ID  = 1
 # SIZE_ID    = 10
 # SET_IDS    = (1, 20)
@@ -12,6 +8,9 @@
 # 1. Filter out climbs with any hold ID > 4000 (~500 climbs total)
 # 2. Filter out climbs with any role ID > 15 (~600 climbs total)
 # 3. Fixed the holds_xy column to be a list of triples (x, y, role) with correct roles
+
+# holds.csv contains index, hold_id, x, y
+# hold_roles contains index, id, name, letter ('s', 'm', 'e', 'f'), color
 
 #%%
 import sqlite3, pandas as pd, re, requests, io, matplotlib.pyplot as plt
@@ -68,8 +67,6 @@ for split in ["train", "val", "test"]:
 
 #%%
 # --- 2. Hold name/index conversion using climbs_train.csv ---
-
-import numpy as np
 
 # Load all unique hold IDs from climbs_train.csv
 train_df = pd.read_csv("climbs_train.csv")
