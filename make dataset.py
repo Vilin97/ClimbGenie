@@ -3,7 +3,7 @@
 import sqlite3
 conn = sqlite3.connect("kilter_dataset.csv")
 tables = ["climbs", "climb_stats", "climb_cache_fields",
-          "difficulty_grades", "beta_links", "placements", "placement_roles", "holes"]
+          "difficulty_grades", "beta_links", "placements", "placement_roles", "holes", 'product_sizes', 'product_sizes_layouts_sets', 'products', 'layouts']
 
 for t in tables:
     print(f"\n-- {t} --")
