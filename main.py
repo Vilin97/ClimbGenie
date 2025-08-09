@@ -12,10 +12,10 @@
 # holds.csv contains index, hold_id, x, y
 # hold_roles contains index, id, name, letter ('s', 'm', 'e', 'f'), color
 
-#%%
 import sqlite3, pandas as pd, re, requests, io, matplotlib.pyplot as plt
 from PIL import Image
 
+#%%
 DB = "kilter_splits.sqlite"
 LAYOUT_ID = 1
 SIZE_ID = 10
@@ -83,38 +83,3 @@ def index_to_hold_id(idx: int) -> int:
 
 for i in range(len(all_hold_ids)):
     assert hold_id_to_index(index_to_hold_id(i)) == i
-
-#%%
-# --- 3. Visualize a climb by hold triples ---
-
-def visualize_climb_by_triples(triples, title=None):
-    img = Image.open("board.png")
-    l, r, b, t = 0, 144, 0, 156
-    xs, ys = img.width / (r - l), img.height / (t - b)
-    fig, ax = plt.subplots(figsize=(6, 9))
-    ax.imshow(img)
-    ax.axis("off")
-    # Use specified colors for each role letter
-    role_styles = {
-        "s": {"edgecolors": "#00DD00", "facecolors": "none", "linewidths": 3, "s": 350},   # start
-        "m": {"edgecolors": "#00FFFF", "facecolors": "none", "linewidths": 3, "s": 300},   # middle
-        "e": {"edgecolors": "#FF00FF", "facecolors": "none", "linewidths": 3, "s": 350},   # end
-        "f": {"edgecolors": "#FFA500", "facecolors": "none", "linewidths": 3, "s": 200},   # foot
-        None: {"edgecolors": "black", "facecolors": "none", "linewidths": 2, "s": 150},
-    }
-    for x, y, role in triples:
-        cx, cy = (x - l) * xs, img.height - (y - b) * ys
-        style = role_styles.get(role, role_styles[None])
-        ax.scatter(cx, cy, **style)
-    ax.set_title(title)
-    plt.tight_layout()
-    plt.show()
-
-# Example usage:
-val_df = pd.read_csv("climbs_val.csv")
-row = val_df.iloc[0]
-holds = row["holds_xy"]
-# Convert holds from string to list of triples
-holds = eval(holds) if isinstance(holds, str) else holds
-name = row["name"]
-visualize_climb_by_triples(holds, title=name)
