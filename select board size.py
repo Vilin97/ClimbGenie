@@ -166,7 +166,7 @@ def visualize_big_boards(min_climbs: int = 200_000, db_path: str = DB) -> None:
 
 
             ordered = sorted(union.items())          # deterministic order
-            idx_map = {pid: i + 1 for i, (pid, _) in enumerate(ordered)}
+            idx_map = {pid: i for i, (pid, _) in enumerate(ordered)}
 
             x_scale = composite.width  / (r - l)
             y_scale = composite.height / (t - b)
@@ -187,7 +187,6 @@ def visualize_big_boards(min_climbs: int = 200_000, db_path: str = DB) -> None:
                     fontsize=6,
                     ha="center",
                     va="center",
-                    linespacing=0.55,
                     linespacing=0.55,
                 )
 
