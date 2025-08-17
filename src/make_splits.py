@@ -49,8 +49,9 @@ for split in ["train", "val", "test"]:
     # Drop rows with any role ID > 15 (~600 climbs total)
     df = df[~df["holds"].apply(lambda h: any(int(re.search(r"r(\d+)", seg).group(1)) > 15 for seg in str(h).split("p") if seg and re.search(r"r(\d+)", seg)))]
     
-    # Make holds_xy hold a list of triples (x, y, role) and reorder holds
+    # Make holds_xy hold only (x, y) and add a new column 'roles' as a string like "sffmmfme"
     new_holds_xy_list = []
+    new_roles_list = []
     new_holds_list = []
     new_holds_indices_list = []
 
@@ -72,16 +73,19 @@ for split in ["train", "val", "test"]:
 
         holds_with_props.sort(key=sort_key)
 
-        # Recreate holds_xy, holds, and holds_indices from sorted holds
-        new_holds_xy = [(h['x'], h['y'], h['role']) for h in holds_with_props]
+        # Recreate holds_xy, holds, holds_indices, and roles from sorted holds
+        new_holds_xy = [(h['x'], h['y']) for h in holds_with_props]
+        new_roles = "".join([h['role'] for h in holds_with_props])
         new_holds = "p".join([f"{h['id']}r{h['role_id']}" for h in holds_with_props])
         new_holds_indices = [hold_id_to_index(h['id']) for h in holds_with_props]
 
         new_holds_xy_list.append(str(new_holds_xy))
+        new_roles_list.append(new_roles)
         new_holds_list.append(new_holds)
         new_holds_indices_list.append(new_holds_indices)
 
     df["holds_xy"] = new_holds_xy_list
+    df["roles"] = new_roles_list
     df["holds"] = new_holds_list
     df["holds_indices"] = new_holds_indices_list
 
