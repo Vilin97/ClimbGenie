@@ -31,6 +31,7 @@ for (idx, row) in train_df.iloc[:2].iterrows():
     vis.draw_climb(holds_xy, roles, title=vis.make_title(row), annotations=holds_indices)
 
 #%%
+# Co-occurrence model
 train_df = pd.read_csv("climbs_train.csv")
 
 cooc_gen = CooccurrenceGenerator()

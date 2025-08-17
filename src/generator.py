@@ -8,10 +8,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+#TODO: monitor cross-entropy loss on train and val
+
 class Generator:
     def __init__(self):
         self.model = None
-        self.all_hold_ids = None
+        self.n_holds = None
         self.all_hold_xys = None
         self.role_id_to_letter = None
         self.role_letter_to_index = None  # maps 's','m','e','f' -> {0..3}
@@ -49,43 +51,31 @@ class Generator:
         return int(torch.multinomial(probs, num_samples=1).item())
 
     # ---- Shared small utilities for simple Markov-like generators ----
-    def _logits_from_start_counts(self, start_counts: np.ndarray) -> torch.Tensor:
-        s = float(np.clip(start_counts.sum(), 1e-8, None))
-        probs = (start_counts / s).astype(np.float32)
-        return torch.log(torch.from_numpy(probs))
-
     def _logits_from_row_counts(self, counts: np.ndarray) -> torch.Tensor:
         row_sums = counts.sum(axis=1, keepdims=True)
         probs = counts / np.clip(row_sums, 1e-8, None)
         return torch.log(torch.tensor(probs, dtype=torch.float32))
 
-    def _monitor_ce(self, logits_start: torch.Tensor, logits_trans: torch.Tensor,
-                    start_targets: list[int], trans_srcs: list[int], trans_tgts: list[int],
+    def _monitor_ce(self, logits_trans: torch.Tensor,
+                    trans_srcs: list[int], trans_tgts: list[int],
                     verbose: bool, tag: str):
         if not verbose:
             return
-        tokens = 0
-        nll = 0.0
-        if start_targets:
-            t = torch.tensor(start_targets, dtype=torch.long)
-            ls = logits_start.unsqueeze(0).expand(len(start_targets), -1)
-            nll += float(F.cross_entropy(ls, t, reduction="sum").item())
-            tokens += len(start_targets)
         if trans_srcs:
             src = torch.tensor(trans_srcs, dtype=torch.long)
             tgt = torch.tensor(trans_tgts, dtype=torch.long)
             sel = logits_trans.index_select(0, src)
-            nll += float(F.cross_entropy(sel, tgt, reduction="sum").item())
-            tokens += len(trans_srcs)
-        if tokens:
-            print(f"[{tag}] loss/token: {nll/tokens:.4f} (tokens: {tokens})")
+            nll = float(F.cross_entropy(sel, tgt, reduction="mean").item())
+            print(f"[{tag}] loss/token: {nll:.4f} (tokens: {len(trans_srcs)})")
 
-    def _generate_markov(self, logits_start: torch.Tensor, logits_trans: torch.Tensor,
-                         length: int, temp: float) -> list[int]:
-        first = self._sample_from_logits(logits_start, temp=temp)
-        out = [first]
-        for _ in range(length - 1):
-            out.append(self._sample_from_logits(logits_trans[out[-1]], temp=temp))
+    def _generate_markov(self, logits_trans: torch.Tensor,
+                         length: int, temp: float, bos_index: int) -> list[int]:
+        out: list[int] = []
+        cur = bos_index
+        for _ in range(length):
+            nxt = self._sample_from_logits(logits_trans[cur], temp=temp)
+            out.append(nxt)
+            cur = nxt
         return out
 
     def _parse_holds_indices(self, holds_indices_str):
@@ -97,83 +87,84 @@ class Generator:
 
     def _load_hold_data(self):
         holds_df = pd.read_csv("holds.csv")
-        self.all_hold_ids = list(holds_df["hold_id"])
+        self.n_holds = len(holds_df)
         self.all_hold_xys = list(holds_df[["x", "y"]].itertuples(index=False, name=None))
-        
+
         roles_df = pd.read_csv("hold_roles.csv")
         self.role_id_to_letter = dict(zip(roles_df["id"], roles_df["letter"]))
         letters = list(roles_df["letter"])
         self.role_index_to_letter = letters
         self.role_letter_to_index = {l: i for i, l in enumerate(letters)}
 
-    def hold_id_to_index(self, hold_id: int) -> int:
-        return self.all_hold_ids.index(hold_id)
-
-    def index_to_hold_id(self, idx: int) -> int:
-        return self.all_hold_ids[idx]
-
     def index_to_xy(self, idx):
         return self.all_hold_xys[idx]
 
 class CooccurrenceGenerator(Generator):
     def train(self, df: pd.DataFrame, alpha: float = 1.0, verbose: bool = True):
-        n = len(self.all_hold_ids)
-        co_counts = np.full((n, n), alpha, dtype=np.float64)
-        start_counts = np.full(n, alpha, dtype=np.float64)
-        start_targets, trans_srcs, trans_tgts = [], [], []
+        n = self.n_holds
+        bos = n  # imaginary hold preceding every sequence
+        # rows: sources (includes BOS), cols: targets (real holds only)
+        co_counts = np.full((n + 1, n), alpha, dtype=np.float64)
+        trans_srcs, trans_tgts = [], []
 
         for holds_str in df["holds_indices"]:
             idxs = self._parse_holds_indices(holds_str)
             if not idxs:
                 continue
-            start_counts[idxs[0]] += 1
-            start_targets.append(idxs[0])
+            # BOS -> first
+            first = idxs[0]
+            co_counts[bos, first] += 1
+            trans_srcs.append(bos)
+            trans_tgts.append(first)
+            # Co-occurrence counts among unique holds in the climb
             uniq = list(dict.fromkeys(idxs))
             for i in uniq:
                 for j in uniq:
                     if j != i:
                         co_counts[i, j] += 1
+            # Sequential transitions for monitoring
             for a, b in zip(idxs, idxs[1:]):
                 trans_srcs.append(a)
                 trans_tgts.append(b)
 
         logits_trans = self._logits_from_row_counts(co_counts)
-        logits_start = self._logits_from_start_counts(start_counts)
-        self.model = {"logits_trans": logits_trans, "logits_start": logits_start}
-        self._monitor_ce(logits_start, logits_trans, start_targets, trans_srcs, trans_tgts, verbose, tag="CoOcc")
+        self.model = {"logits_trans": logits_trans, "bos_idx": bos}
+        self._monitor_ce(logits_trans, trans_srcs, trans_tgts, verbose, tag="CoOcc")
 
     def generate(self, length: int, temp: float = 1.0, angle: int = None, difficulty: str = None):
         if self.model is None:
             raise RuntimeError("Model is not trained. Call train() first.")
-        return self._generate_markov(self.model["logits_start"], self.model["logits_trans"], length, temp)
+        return self._generate_markov(self.model["logits_trans"], length, temp, self.model["bos_idx"])
 
 class BigramGenerator(Generator):
     def train(self, df: pd.DataFrame, alpha: float = 1.0, verbose: bool = True):
-        n = len(self.all_hold_ids)
-        counts = np.full((n, n), alpha, dtype=np.float64)
-        start_counts = np.full(n, alpha, dtype=np.float64)
-        start_targets, trans_srcs, trans_tgts = [], [], []
+        n = self.n_holds
+        bos = n  # imaginary hold preceding every sequence
+        counts = np.full((n + 1, n), alpha, dtype=np.float64)
+        trans_srcs, trans_tgts = [], []
 
         for _, row in df.iterrows():
             seq = self._parse_holds_indices(row["holds_indices"])
             if not seq:
                 continue
-            start_counts[seq[0]] += 1
-            start_targets.append(seq[0])
+            # BOS -> first
+            counts[bos, seq[0]] += 1
+            trans_srcs.append(bos)
+            trans_tgts.append(seq[0])
+            # Bigram transitions
             for a, b in zip(seq, seq[1:]):
                 counts[a, b] += 1
                 trans_srcs.append(a)
                 trans_tgts.append(b)
 
         logits_trans = self._logits_from_row_counts(counts)
-        logits_start = self._logits_from_start_counts(start_counts)
-        self.model = {"logits_trans": logits_trans, "logits_start": logits_start}
-        self._monitor_ce(logits_start, logits_trans, start_targets, trans_srcs, trans_tgts, verbose, tag="Bigram")
+        self.model = {"logits_trans": logits_trans, "bos_idx": bos}
+        self._monitor_ce(logits_trans, trans_srcs, trans_tgts, verbose, tag="Bigram")
 
     def generate(self, length: int, temp: float = 1.0, angle: int = None, difficulty: str = None):
         if self.model is None:
             raise RuntimeError("Model is not trained. Call train() first.")
-        return self._generate_markov(self.model["logits_start"], self.model["logits_trans"], length, temp)
+        return self._generate_markov(self.model["logits_trans"], length, temp, self.model["bos_idx"])
 
 
 class AutoRegressiveGenerator(Generator):
@@ -182,8 +173,8 @@ class AutoRegressiveGenerator(Generator):
     - Tokens are pairs (hold_idx in [0..N-1], role in {'s','m','e','f'}).
     - Uses a GRU over sum of hold and role embeddings (+ positional embeddings).
     - Trained with cross-entropy to predict the next token at each position.
-    - Generation: first role is forced to 's'; stops when role 'e' is sampled or
-      when max_length is reached. Temperature controls sampling.
+        - Generation treats the first hold like any other step (implicit BOS context)
+            and stops when role 'e' is sampled or when max_length is reached.
     Context length is capped at context_len (default 40).
     """
 
@@ -285,7 +276,7 @@ class AutoRegressiveGenerator(Generator):
 
     def train(self, df: pd.DataFrame, epochs=3, lr=3e-3, weight_decay=1e-2,
               max_samples=None, verbose: bool = True):
-        n_holds = len(self.all_hold_ids)
+        n_holds = self.n_holds
         n_roles = len(self.role_index_to_letter)
         self.model = AutoRegressiveGenerator._ARM(
             n_holds=n_holds,
@@ -343,36 +334,22 @@ class AutoRegressiveGenerator(Generator):
 
         result: list[tuple[int, str]] = []
 
-        # First token: force role='s'
-        with torch.no_grad():
-            logits_hold, logits_role = self.model.next_logits(holds_ctx, roles_ctx)
-            hold_idx = self._sample_from_logits(logits_hold[0], temp=temp)
-            role_idx = self.role_letter_to_index.get('s', 0)
-            result.append((hold_idx, 's'))
-            holds_ctx = torch.tensor([[hold_idx]], dtype=torch.long, device=self.device)
-            roles_ctx = torch.tensor([[role_idx]], dtype=torch.long, device=self.device)
-
-        # Subsequent tokens
-        for _ in range(max_length - 1):
+        # Generate max_length steps; model learns that first role is typically 's'
+        for _ in range(max_length):
             # Keep only last context_len tokens
             if holds_ctx.shape[1] > self.context_len:
                 holds_ctx = holds_ctx[:, -self.context_len:]
                 roles_ctx = roles_ctx[:, -self.context_len:]
             with torch.no_grad():
                 logits_hold, logits_role = self.model.next_logits(holds_ctx, roles_ctx)
-                # Sample role first; if 'e', we stop after appending it
                 role_idx = self._sample_from_logits(logits_role[0], temp=temp)
-                role_letter = self.role_index_to_letter[role_idx]
-                if role_letter == 'e':
-                    # We still need a hold for the end marker; sample it
-                    hold_idx = self._sample_from_logits(logits_hold[0], temp=temp)
-                    result.append((hold_idx, role_letter))
-                    break
-                # Otherwise sample hold and continue
                 hold_idx = self._sample_from_logits(logits_hold[0], temp=temp)
+                role_letter = self.role_index_to_letter[role_idx]
                 result.append((hold_idx, role_letter))
                 # Append to context
                 holds_ctx = torch.cat([holds_ctx, torch.tensor([[hold_idx]], device=self.device)], dim=1)
                 roles_ctx = torch.cat([roles_ctx, torch.tensor([[role_idx]], device=self.device)], dim=1)
+                if role_letter == 'e':
+                    break
 
         return result
