@@ -3,15 +3,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from itertools import combinations
+import ast
 
 #%%
 # Load the training data
-try:
-    train_df = pd.read_csv("climbs_train.csv")
-except FileNotFoundError:
-    print("climbs_train.csv not found. Please run main.py first to generate it.")
-    exit()
+train_df = pd.read_csv("climbs_train.csv")
 
+#%%
 # Compute and print the correlation
 correlation = train_df['angle'].corr(train_df['difficulty'])
 print(f"Correlation between angle and difficulty: {correlation:.4f}")
@@ -65,3 +63,13 @@ for i, (climb_A, climb_B) in enumerate(interesting_pairs[:10]):
     print(f"  Setting 2: Angle={climb_B['angle']}°, Difficulty={climb_B['difficulty']:.2f}, Grade='{climb_B['grade']}', Ascents={climb_B['ascents']}")
 
 #%%
+# Compute number of holds for each climb
+train_df['num_holds'] = train_df['holds_xy'].apply(lambda x: len(ast.literal_eval(x)))
+
+plt.figure(figsize=(10, 6))
+sns.histplot(train_df['num_holds'], bins=20, kde=False, color='skyblue')
+plt.title('Histogram of Number of Holds per Climb')
+plt.xlabel('Number of Holds')
+plt.ylabel('Count')
+plt.grid(True)
+plt.show()

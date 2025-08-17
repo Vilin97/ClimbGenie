@@ -17,10 +17,6 @@
 #%%
 import sqlite3, pandas as pd, re, numpy as np
 
-def extract_hold_ids(frames_col):
-    # frames_col: string like "1096r1p1102r2p..."
-    return [int(seg.split("r")[0]) for seg in str(frames_col).split("p") if seg]
-
 holds_df = pd.read_csv("holds.csv")
 all_hold_ids = list(holds_df["hold_id"])
 
@@ -43,6 +39,10 @@ SET_IDS = [1, 20]
 API = "https://api.kilterboardapp.com/img/{}"
 
 # --- 1. Make DataFrame & save as CSV ---
+def extract_hold_ids(frames_col):
+    # frames_col: string like "1096r1p1102r2p..."
+    return [int(seg.split("r")[0]) for seg in str(frames_col).split("p") if seg]
+
 def parse_holds(holds_str):
     # returns list of (hold_id, role_id)
     return [

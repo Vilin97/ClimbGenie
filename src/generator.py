@@ -45,6 +45,14 @@ class Generator:
     def index_to_hold_id(self, idx: int) -> int:
         return self.all_hold_ids[idx]
 
+    def index_to_xy(self, idx: int) -> tuple[int, int]:
+        """Convert a hold index (in holds.csv order) to its (x, y) position.
+
+        Uses the cached holds.csv mapping loaded in _load_hold_data().
+        """
+        hold_id = self.index_to_hold_id(idx)
+        return self.holes_pos[hold_id]
+
 class CooccurrenceGenerator(Generator):
     def train(self, df: pd.DataFrame):
         co_occurrence_matrix = np.zeros((len(self.all_hold_ids), len(self.all_hold_ids)))
