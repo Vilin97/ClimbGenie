@@ -16,10 +16,49 @@
 
 #%%
 from src.generator import CooccurrenceGenerator, BigramGenerator
+from src.model import BigramModel
 import src.utils as utils
 import src.vis as vis
 import pandas as pd
-import numpy as np
+
+roles_df = pd.read_csv("hold_roles.csv")
+def role_index_to_letter(idx):
+    row = roles_df[roles_df["index"] == idx]
+    assert len(row) == 1
+    return row["letter"].item()
+
+holds_df = pd.read_csv("holds.csv")
+N_HOLDS = len(list(holds_df["hold_id"]))
+def hold_index_to_xy(idx):
+    row = holds_df[holds_df["index"] == idx]
+    assert len(row) == 1
+    return (row["x"].item(), row["y"].item())
+
+def tokens_to_holds_and_roles(tokens):
+    holds_xy = []
+    roles = []
+    for t in tokens:
+        if t == 0:
+            continue
+        hold = (t - 1) % N_HOLDS
+        role = (t - 1) // N_HOLDS
+        print(t, hold, role)
+        holds_xy.append(hold_index_to_xy(hold))
+        roles.append(role_index_to_letter(role))
+    return holds_xy, roles
+
+#%%
+bigram_model = BigramModel()
+bigram_model.train()
+
+#%%
+difficulty = 22 # V6
+angle = 40
+temperature = 1.0
+tokens = bigram_model.generate(difficulty, angle, temperature)
+holds_xy, roles = tokens_to_holds_and_roles(tokens)
+vis.draw_climb(holds_xy, roles, title=f"Bigram sample | diff={difficulty}, angle={angle}, temp={temperature}")
+
 
 #%%
 # Visualize some climbs

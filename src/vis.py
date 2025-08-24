@@ -28,6 +28,7 @@ def draw_climb(xy_pairs, roles, title=None, annotations=None):
     plt.show()
 
 def make_title(row):
+    """Make a title string. Expects a dict with 'name', 'grade', 'angle', and 'ascents' fields."""
     return f"{row['name']} | {row['grade']} @ {int(row['angle'])}° | {int(row['ascents'])} ascents"
 
 def draw_climb_row(row):
@@ -35,15 +36,3 @@ def draw_climb_row(row):
     roles = row["roles"]
     holds_indices = eval(row["holds_indices"])
     draw_climb(holds_xy, roles, title=make_title(row), annotations=holds_indices)
-
-# Examples:
-# holds = [(32, 8, 'f'),
-#  (56, 48, 's'),
-#  (40, 56, 's'),
-#  (112, 64, 'f'),
-#  (72, 80, 'm'),
-#  (96, 104, 'm'),
-#  (96, 128, 'm'),
-#  (88, 152, 'e'),
-#  (60, 4, 'f')]
-# draw_climb(holds, title="run over me, 7a/V6 @ 30°")

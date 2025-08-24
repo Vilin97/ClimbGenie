@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from itertools import combinations
 import ast
+import re
+import numpy as np
 
 #%%
 # Load the training data
@@ -72,4 +74,109 @@ plt.title('Histogram of Number of Holds per Climb')
 plt.xlabel('Number of Holds')
 plt.ylabel('Count')
 plt.grid(True)
+plt.show()
+
+#%%
+
+fig, ax = plt.subplots(figsize=(10, 6))
+data = train_df['grade_us'].dropna().astype(int)
+total = len(data)
+
+sns.histplot(data, bins=range(0, 15), color='skyblue', discrete=True, ax=ax)
+
+ax.set_title('Histogram of V grade (V0 – V13)')
+ax.set_xlabel('V grade')
+ax.set_ylabel('Count')
+ax.set_xticks(range(0, 14))
+ax.set_xlim(-0.5, 13.5)
+ax.grid(True)
+
+# Annotate each bar with percentage in small red text
+patches = ax.patches[:-1]
+if total > 0:
+    heights = [p.get_height() for p in patches]
+    maxh = max(heights) if heights else 0
+    y_offset = maxh * 0.02 if maxh > 0 else 0.1
+    for p in patches:
+        h = p.get_height()
+        if h <= 0:
+            continue
+        x = p.get_x() + p.get_width() / 2
+        pct = h / total * 100
+        ax.text(x, h + y_offset, f"{pct:.1f}%", color='red', fontsize=8, ha='center', va='bottom')
+
+plt.tight_layout()
+plt.show()
+
+# Histogram of difficulty (numeric) with percentage annotations
+fig, ax = plt.subplots(figsize=(10, 6))
+data = train_df['difficulty'].dropna()
+total = len(data)
+
+# compute bin edges and centers so we can place a tick for each bin
+n_bins = 21
+counts, bin_edges = np.histogram(data, bins=n_bins)
+centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+sns.histplot(data, bins=bin_edges, kde=False, color='skyblue', ax=ax)
+
+ax.set_title('Histogram of Difficulty')
+ax.set_xlabel('Difficulty')
+ax.set_ylabel('Count')
+ax.grid(True)
+
+# set a tick at each bin center
+ax.set_xticks(centers)
+ax.set_xticklabels([f"{int(c-0.5)}" for c in centers], rotation=45, ha='right', fontsize=8)
+
+patches = ax.patches
+if total > 0 and patches:
+    heights = [p.get_height() for p in patches]
+    maxh = max(heights) if heights else 0
+    y_offset = maxh * 0.02 if maxh > 0 else 0.1
+    for p in patches:
+        h = p.get_height()
+        if h <= 0:
+            continue
+        x = p.get_x() + p.get_width() / 2
+        pct = h / total * 100
+        ax.text(x, h + y_offset, f"{pct:.1f}%", color='red', fontsize=8, ha='center', va='bottom')
+
+plt.tight_layout()
+plt.show()
+
+fig, ax = plt.subplots(figsize=(10, 6))
+data = train_df['angle'].dropna()
+total = len(data)
+
+# compute bin edges and centers for angle histogram
+n_bins = 14
+counts, bin_edges = np.histogram(data, bins=n_bins)
+centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+sns.histplot(data, bins=bin_edges, kde=False, color='skyblue', ax=ax)
+
+ax.set_title('Histogram of Angle')
+ax.set_xlabel('Angle (degrees)')
+ax.set_ylabel('Count')
+ax.grid(True)
+
+# set a tick at each bin center (rounded to 1 decimal or integer as appropriate)
+ax.set_xticks(centers)
+ax.set_xticklabels([f"{int(c-2.5)}" for c in centers], rotation=45, ha='right', fontsize=8)
+
+patches = ax.patches
+if total > 0 and patches:
+    heights = [p.get_height() for p in patches]
+    maxh = max(heights) if heights else 0
+    y_offset = maxh * 0.02 if maxh > 0 else 0.1
+    for p in patches:
+        h = p.get_height()
+        if h <= 0:
+            continue
+        x = p.get_x() + p.get_width() / 2
+        pct = h / total * 100
+        ax.text(x, h + y_offset, f"{pct:.1f}%", color='red', fontsize=8, ha='center', va='bottom')
+
+plt.tight_layout()
 plt.show()
