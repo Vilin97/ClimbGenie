@@ -48,8 +48,16 @@ def tokens_to_holds_and_roles(tokens):
     return holds_xy, roles
 
 #%%
-bigram_model = BigramModel()
+bigram_model = BigramModel(num_difficulty_bins=1, num_angle_bins=1)
 bigram_model.train()
+
+#%%
+train_df = pd.read_csv("climbs_train.csv")
+val_df = pd.read_csv("climbs_val.csv")
+train_nll = bigram_model.nll(train_df.sample(1000))
+val_nll = bigram_model.nll(val_df.sample(1000))
+print(f"Train NLL: {train_nll:.4f} nats/token")
+print(f"Val   NLL: {val_nll:.4f} nats/token")
 
 #%%
 difficulty = 22 # V6

@@ -60,7 +60,7 @@ class ARModel(Model):
         raise NotImplementedError("next_token_logits() method must be implemented by subclasses")
 
     @torch.no_grad()
-    def nll(self, model, df):
+    def nll(self, df):
         """Compute negative log-likelihood (nats/token) on a dataframe of climbs with 'tokens', 'difficulty', and 'angle' columns"""
         total_loss = 0.0
         total_tokens = 0
@@ -69,7 +69,7 @@ class ARModel(Model):
             angle = row["angle"]
             tokens = parse_tokens(row["tokens"])
             for i in range(len(tokens) - 1):
-                logits = model.next_token_logits(difficulty, angle, tokens[:i+1])
+                logits = self.next_token_logits(difficulty, angle, tokens[:i+1])
                 target = torch.tensor([tokens[i+1]])
                 total_loss += F.cross_entropy(logits.unsqueeze(0), target, reduction='sum').item()
                 total_tokens += 1
